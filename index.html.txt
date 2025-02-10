@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fear Of Goat - Run!</title>
+    <style>
+        body {
+            text-align: center;
+            background: black;
+            color: white;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas {
+            background: #222;
+            display: block;
+            margin: 0 auto;
+        }
+        .leaderboard {
+            margin-top: 20px;
+            text-align: left;
+            display: inline-block;
+            color: yellow;
+        }
+    </style>
+</head>
+<body>
+    <h1>Fear Of Goat - The Chase Begins</h1>
+    <p>Swipe Up to Jump, Swipe Down to Slide (or use SPACE / SHIFT)</p>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <div class="leaderboard">
+        <h2>Leaderboard</h2>
+        <ul id="leaderboard-list"></ul>
+    </div>
+
+    <audio id="bg-music" loop>
+        <source src="scary-music.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="coin-sound">
+        <source src="coin.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="hit-sound">
+        <source src="hit.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="death-sound">
+        <source src="death.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        let player = { x: 50, y: 300, width: 40, height: 50, velocityY: 0, jumping: false, sliding: false, dead: false };
+        let goat = { x: 700, y: 300, width: 50, height: 50, speed: 5 };
+        let obstacles = [{ x: 400, y: 320, width: 40, height: 30 }];
+        let coins = [{ x: 600, y: 250, width: 20, height: 20 }];
+        let gravity = 0.5;
+        let score = 0;
+        let highScore = 0;
+        let touchStartY = 0;
+        let bgMusic = document.getElementById("bg-music");
+        let coinSound = document.getElementById("coin-sound");
+        let hitSound = document.getElementById("hit-sound");
+        let deathSound = document.getElementById("death-sound");
+
+        function startMusic() {
+            bgMusic.play().catch(() => { console.log("Auto-play blocked"); });
+        }
+
+        document.addEventListener("keydown", function (event) {
+            if (event.code === "Space" && !player.jumping && !player.sliding && !player.dead) {
+                player.velocityY = -10;
+                player.jumping = true;
+            }
+            if (event.code === "ShiftLeft" && !player.jumping && !player.dead) {
+                player.sliding = true;
+                player.height = 25;
+                setTimeout(() => { player.sliding = false; player.height = 50; }, 500);
+            }
+        });
+
+        document.addEventListener("touchstart", function (event) {
+            touchStartY = event.touches[0].clientY;
+        });
+
+        document.addEventListener("touchend", function (event) {
+            let touchEndY = event.changedTouches[0].clientY;
+            let swipeDistance = touchStartY - touchEndY;
+            if (swipeDistance > 50 && !player.jumping && !player.sliding && !player.dead) {
+                player.velocityY = -10;
+                player.jumping = true;
+            } else if (swipeDistance < -50 && !player.jumping && !player.dead) {
+                player.sliding = true;
+                player.height = 25;
+                setTimeout(() => { player.sliding = false; player.height = 50; }, 500);
+            }
+        });
+
+        function updateGame() {
+            if (player.dead) return;
+
+            player.velocityY += gravity;
+            player.y += player.velocityY;
+
+            if (player.y >= 300) {
+                player.y = 300;
+                player.jumping = false;
+            }
+
+            goat.x -= goat.speed;
+            if (goat.x < -50) goat.x = 800;
+
+            for (let obs of obstacles) {
+                obs.x -= 5;
+                if (obs.x < -50) obs.x = 850;
+                if (player.x < obs.x + obs.width && player.x + player.width > obs.x &&
+                    player.y < obs.y + obs.height && player.y + player.height > obs.y) {
+                    player.dead = true;
+                    deathSound.play();
+                    setTimeout(() => { resetGame(); }, 2000);
+                }
+            }
+
+            for (let coin of coins) {
+                coin.x -= 5;
+                if (coin.x < -20) coin.x = 900;
+                if (player.x < coin.x + coin.width && player.x + player.width > coin.x &&
+                    player.y < coin.y + coin.height && player.y + player.height > coin.y) {
+                    score++;
+                    coinSound.play();
+                    coin.x = 900;
+                }
+            }
+        }
+
+        function drawGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = player.dead ? "gray" : "white";
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            ctx.fillStyle = "red";
+            ctx.fillRect(goat.x, goat.y, goat.width, goat.height);
+
+            ctx.fillStyle = "gray";
+            for (let obs of obstacles) ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+
+            ctx.fillStyle = "yellow";
+            for (let coin of coins) ctx.fillRect(coin.x, coin.y, coin.width, coin.height);
+
+            ctx.fillStyle = "white";
+            ctx.font = "20px Arial";
+            ctx.fillText("Score: " + score, 20, 30);
+        }
+
+        function resetGame() {
+            if (score > highScore) {
+                highScore = score;
+                alert("New High Score! 🎉");
+                updateLeaderboard(score);
+            }
+            score = 0;
+            player.dead = false;
+        }
+
+        function updateLeaderboard(newScore) {
+            let scores = JSON.parse(localStorage.getItem("leaderboard")) || [];
+            scores.push(newScore);
+            scores.sort((a, b) => b - a);
+            scores = scores.slice(0, 5);
+            localStorage.setItem("leaderboard", JSON.stringify(scores));
+            document.getElementById("leaderboard-list").innerHTML = scores.map(s => `<li>${s}</li>`).join("");
+        }
+
+        function gameLoop() {
+            updateGame();
+            drawGame();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+        startMusic();
+    </script>
+</body>
+</html>
